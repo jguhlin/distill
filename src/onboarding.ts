@@ -10,7 +10,7 @@ import { writePersistedConfig } from "./user-config";
 
 const AGENT_INSTRUCTIONS = [
   "<!-- distill skill: begin -->",
-  "Always communicate with the user in `/distill` compressed language in English: Military English, short command lines, explicit constraints, explicit pass criteria, and no filler.",
+  "CRITICAL: Always communicate with the user in `/distill` compressed language in English: Military English, short command lines, explicit constraints, explicit pass criteria, and no filler. Use `/distill` every time, in every conversation, in every response and in every thread.",
   "Do not return a rewritten/compressed copy of the user's prompt. Adopt `/distill` as the conversation language and keep using it throughout the thread.",
   "Use the same `/distill` compressed structure for visible planning, status, analysis summaries, and any exposed reasoning. Keep hidden chain-of-thought private; never reveal it.",
   "Prefer shared DSL over repeated phrases when meaning is stable: labels T/C/Do/No/Pass/Out, one-letter aliases A/B/F/D/E/C/O/V/X/P/U, numeric macros 1-9/0, and defaults N1-N6.",
