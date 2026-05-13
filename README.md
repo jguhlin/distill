@@ -30,9 +30,7 @@ git diff | distill "What changed? Return only files changed and one-line summary
 terraform plan 2>&1 | distill "Is this safe? Return SAFE, REVIEW, or UNSAFE, followed by risky changes."
 ```
 
-## How it works
-
-`distill` reads the command output and send to your **local LLM** and return just what matters.
+**Recommended LLM: qwen3.5-4b**
 
 ## Example
 
