@@ -1,8 +1,12 @@
 # distill
 
-`distill` compresses command output into the exact answer an LLM needs.
+Agent command outputs are one of the biggest sources of token waste.
 
-Use it for logs, test results, diffs, plans, audits, and other noisy terminal output.
+Logs, test results, stack traces… thousands of tokens sent to an LLM just to answer a simple question.
+
+**🔥 `distill` compresses command outputs into only what the LLM actually needs.**
+
+Save **up to 99% of tokens** without losing the signal.
 
 ## How to use
 
@@ -18,15 +22,7 @@ Run onboarding:
 distill
 ```
 
-Onboarding asks for:
-
-- `host`
-- `model`
-- optional `api-key`
-- optional `timeout-ms`
-- whether to install `/distill` for Codex and Claude (default: yes)
-
-After onboarding, pipe command output into `distill`:
+After onboarding you can use `/distill` skill in Claude / Codex or pipe command output into `distill`:
 
 ```bash
 bun test 2>&1 | distill "Did tests pass? Return PASS or FAIL, followed by failing test names if any."
@@ -34,27 +30,9 @@ git diff | distill "What changed? Return only files changed and one-line summary
 terraform plan 2>&1 | distill "Is this safe? Return SAFE, REVIEW, or UNSAFE, followed by risky changes."
 ```
 
-`distill` uses any OpenAI-compatible endpoint. Onboarding stores your local defaults, and CLI flags can override them:
-
-```bash
-distill --host http://127.0.0.1:1234/v1 --model your-model "what failed?"
-```
-
-You can also expand compressed `/distill` output back to normal language:
-
-```bash
-distill translate "Best: Fix auth bug. Add failing test first. No frontend change. Pass: tests pass."
-distill translate "Dict: be=backend
-T: corrigir auth
-Do: repro, teste falhando, patch be
-Pass: testes passam" pt-BR
-```
-
 ## How it works
 
-`distill` reads stdin, sends the command output plus your explicit question to your configured model, and prints only the useful result.
-
-It keeps the original command behavior simple: interactive prompts pass through, and normal shell `pipefail` still works when you enable it.
+`distill` reads stdin, sends the command output plus your explicit question to your LLM, and prints only the useful result.
 
 ## Example
 
@@ -65,4 +43,4 @@ rg -n "terminal|PERMISSION|permission|Permissions|Plan|full access|default" desk
 - **Before:** [7648 tokens 30592 characters 10218 words](./examples/1/BEFORE.md)
 - **After:** [99 tokens 396 characters 57 words](./examples/1/AFTER.md)
 
-Saved ~98.7% tokens.
+**🔥 Saved ~98.7% tokens**
