@@ -43,12 +43,12 @@ D inspect remotes + MR meta
 R merge/update may block w/o token
 ```
 
-It can also set inline variables for repeated nouns. The CLI learns these into DSL memory and injects active entries into later prompts:
+It can also set inline variables for repeated nouns. The model chooses them dynamically from terms that repeat or are likely to repeat; there is no fixed variable list. Inline variables stay thread-local unless `distill dsl learn-thread --stdin` sees the explicit variable more than 5 times in the transcript. Learned entries are removed when absent from the next learned thread.
 
 ```text
-S npm workspace=#w3 version=#v1 sync no-op
-D patch=#p1 package=#p2 manifests mechanically
-D regen lock after #p2 manifest sync
+S cache=#c1 warmed model=#m1
+D inspect #c1 hit rate
+D compare #m1 latency
 ```
 
 Manage DSL memory:

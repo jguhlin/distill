@@ -82,6 +82,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const CANDIDATE_TTL_DAYS = 14;
 const ACTIVE_WINDOW_DAYS = 30;
 const STALE_GRACE_DAYS = 30;
+const THREAD_PROMOTION_OCCURRENCE_THRESHOLD = 5;
 const SCOPE_CAPS: Record<DslScope, number> = {
   global: 20,
   stack: 30,
@@ -91,42 +92,7 @@ const NAMED_KEY_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,31}$/;
 const VARIABLE_KEY_PATTERN = /^#[a-z][0-9][a-z0-9._-]{0,29}$/;
 const DICT_KEY_CAPTURE = "(#[A-Za-z][0-9][A-Za-z0-9._-]{0,29}|[A-Za-z0-9._-]{1,32})";
 
-const BUILTIN_ENTRIES: Array<Pick<DslEntry, "key" | "meaning" | "kind">> = [
-  { key: "S", meaning: "state or status", kind: "alias" },
-  { key: "C", meaning: "cause or context", kind: "alias" },
-  { key: "D", meaning: "action or decision", kind: "alias" },
-  { key: "R", meaning: "risk or blocker", kind: "alias" },
-  { key: "O", meaning: "outcome or output", kind: "alias" },
-  { key: "N", meaning: "constraint or no-go", kind: "alias" },
-  { key: "P", meaning: "pass criteria or proof", kind: "alias" },
-  { key: "A", meaning: "authentication or authorization", kind: "alias" },
-  { key: "B", meaning: "backend", kind: "alias" },
-  { key: "F", meaning: "frontend", kind: "alias" },
-  { key: "E", meaning: "end-to-end tests", kind: "alias" },
-  { key: "V", meaning: "environment", kind: "alias" },
-  { key: "X", meaning: "dependencies", kind: "alias" },
-  { key: "U", meaning: "user interface", kind: "alias" },
-  { key: "DB", meaning: "database", kind: "alias" },
-  { key: "CFG", meaning: "configuration", kind: "alias" },
-  { key: "DOC", meaning: "documentation", kind: "alias" },
-  { key: "PERM", meaning: "permissions", kind: "alias" },
-  { key: "1", meaning: "add failing regression test first", kind: "macro" },
-  { key: "2", meaning: "run relevant tests", kind: "macro" },
-  { key: "3", meaning: "report summary, files, tests, and status", kind: "macro" },
-  { key: "4", meaning: "review for bugs, regressions, security, and risks", kind: "macro" },
-  { key: "5", meaning: "implement smallest safe fix", kind: "macro" },
-  { key: "6", meaning: "validate with tests or checks", kind: "macro" },
-  { key: "7", meaning: "commit and push changes", kind: "macro" },
-  { key: "8", meaning: "create or update pull request", kind: "macro" },
-  { key: "9", meaning: "release or publish flow", kind: "macro" },
-  { key: "0", meaning: "exact raw output required", kind: "macro" },
-  { key: "N1", meaning: "do not change frontend", kind: "default" },
-  { key: "N2", meaning: "do not change backend", kind: "default" },
-  { key: "N3", meaning: "do not change UI", kind: "default" },
-  { key: "N4", meaning: "do not do broad refactors", kind: "default" },
-  { key: "N5", meaning: "preserve unrelated user changes", kind: "default" },
-  { key: "N6", meaning: "interactive or TUI command", kind: "default" }
-];
+const BUILTIN_ENTRIES: Array<Pick<DslEntry, "key" | "meaning" | "kind">> = [];
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
@@ -567,8 +533,6 @@ function parseDictEntries(output: string): Array<{ key: string; meaning: string;
     }
   }
 
-  entries.push(...parseInlineVariableEntries(output));
-
   return entries;
 }
 
@@ -735,6 +699,7 @@ function normalizeMeaning(input: string): string {
     .replace(/[`"'*_>#()[\]{}]/g, " ")
     .replace(/\s+/g, " ")
     .replace(/[.,;:!?]+$/g, "")
+    .trim()
     .toLowerCase();
 }
 
@@ -894,27 +859,15 @@ export function extractThreadLearnCandidates(
 ): DslThreadLearnCandidate[] {
   const byMeaning = new Map<string, DslThreadLearnCandidate>();
 
-  for (const entry of parseDictEntries(transcript)) {
+  for (const entry of parseInlineVariableEntries(transcript)) {
     const count = Math.max(
       countMeaningOccurrences(transcript, entry.meaning),
       countMeaningOccurrences(transcript, entry.key)
     );
-    addThreadCandidate(byMeaning, scope, entry.kind, entry.meaning, count, "dict", entry.key);
-  }
 
-  for (const command of extractRepeatedLineCommands(transcript)) {
-    addThreadCandidate(byMeaning, scope, "macro", command.meaning, command.count, "command");
-  }
-
-  for (const phrase of extractRepeatedPhrases(transcript)) {
-    addThreadCandidate(
-      byMeaning,
-      scope,
-      inferKind(candidateKeyFromMeaning(phrase.meaning), phrase.meaning),
-      phrase.meaning,
-      phrase.count,
-      "phrase"
-    );
+    if (count > THREAD_PROMOTION_OCCURRENCE_THRESHOLD) {
+      addThreadCandidate(byMeaning, scope, entry.kind, entry.meaning, count, "dict", entry.key);
+    }
   }
 
   return [...byMeaning.values()]
@@ -1058,7 +1011,7 @@ export async function learnFromDistillOutput(
 ): Promise<string> {
   const now = options.now ?? new Date();
   const parsedEntries = parseDictEntries(output).filter((entry) =>
-    isReusableLearnedEntry(entry.key, entry.meaning)
+    !isVariableKey(entry.key) && isReusableLearnedEntry(entry.key, entry.meaning)
   );
   const { memory } = await readScopedMemory(
     env,
@@ -1106,6 +1059,34 @@ export async function learnFromDistillOutput(
   return `${results.join("\n")}\n`;
 }
 
+function entryAppearsInTranscript(entry: DslEntry, transcript: string): boolean {
+  return (
+    countMeaningOccurrences(transcript, entry.meaning) > 0 ||
+    countMeaningOccurrences(transcript, entry.key) > 0
+  );
+}
+
+function evictAbsentLearnedEntries(memory: DslMemoryFile, transcript: string): {
+  memory: DslMemoryFile;
+  evictedCount: number;
+} {
+  const entries = memory.entries.filter(
+    (entry) =>
+      entry.builtin ||
+      entry.status === "pinned" ||
+      entryAppearsInTranscript(entry, transcript)
+  );
+
+  return {
+    memory: { ...memory, entries },
+    evictedCount: memory.entries.length - entries.length
+  };
+}
+
+function formatLearnThreadResult(evictedCount: number, body: string): string {
+  return evictedCount > 0 ? `evicted ${evictedCount} entries\n${body}` : body;
+}
+
 export async function learnFromThreadTranscript(
   env: NodeJS.ProcessEnv,
   cwd: string,
@@ -1125,15 +1106,24 @@ export async function learnFromThreadTranscript(
     throw new UsageError("DSL learn-thread requires non-empty stdin.");
   }
 
-  const extracted = extractThreadLearnCandidates(transcript, scope);
-  const mergedMemory = await readMergedDslMemory(env, cwd, options.stack, now);
-  const { memory: targetMemory } = await readScopedMemory(
+  const { resolved, memory: initialTargetMemory } = await readScopedMemory(
     env,
     scope,
     cwd,
     options.stack,
     now
   );
+  const { memory: targetMemory, evictedCount } = evictAbsentLearnedEntries(
+    initialTargetMemory,
+    transcript
+  );
+
+  if (evictedCount > 0) {
+    await writeMemoryFile(resolved.path, { ...targetMemory, updatedAt: iso(now) });
+  }
+
+  const extracted = extractThreadLearnCandidates(transcript, scope);
+  const mergedMemory = await readMergedDslMemory(env, cwd, options.stack, now);
   const allExisting = [...mergedMemory, ...targetMemory.entries];
   const compacted = compactLearnedEntries(extracted, allExisting).map((entry) => {
     const source = extracted.find((candidate) => candidate.meaning === entry.meaning);
@@ -1146,24 +1136,13 @@ export async function learnFromThreadTranscript(
   });
 
   if (compacted.length === 0) {
-    return `${options.dryRun ? "would learn-thread" : "learn-thread"} 0 entries\n`;
+    return formatLearnThreadResult(
+      evictedCount,
+      `${options.dryRun ? "would learn-thread" : "learn-thread"} 0 entries\n`
+    );
   }
 
-  let reviewed = deterministicThreadReviews(compacted);
-
-  if (options.reviewer) {
-    try {
-      reviewed = await options.reviewer({
-        transcript,
-        candidates: compacted,
-        dslMemory: mergedMemory,
-        scope,
-        stack: options.stack
-      });
-    } catch {
-      reviewed = deterministicThreadReviews(compacted);
-    }
-  }
+  const reviewed = deterministicThreadReviews(compacted);
 
   const pinnedKeys = new Set(
     allExisting
@@ -1203,16 +1182,22 @@ export async function learnFromThreadTranscript(
     }));
 
   if (approved.length === 0) {
-    return `${options.dryRun ? "would learn-thread" : "learn-thread"} 0 entries\n`;
+    return formatLearnThreadResult(
+      evictedCount,
+      `${options.dryRun ? "would learn-thread" : "learn-thread"} 0 entries\n`
+    );
   }
 
   if (options.dryRun) {
-    return `would learn-thread ${approved.length} entries in ${scope}\n${approved
+    return formatLearnThreadResult(
+      evictedCount,
+      `would learn-thread ${approved.length} entries in ${scope}\n${approved
       .map(
         (entry) =>
           `${entry.key}\t${entry.kind}\t${entry.scope}\t${entry.confidence.toFixed(2)}\t${entry.meaning}\t${entry.reason}`
       )
-      .join("\n")}\n`;
+      .join("\n")}\n`
+    );
   }
 
   const results: string[] = [];
@@ -1234,7 +1219,7 @@ export async function learnFromThreadTranscript(
     );
   }
 
-  return `${results.join("\n")}\n`;
+  return formatLearnThreadResult(evictedCount, `${results.join("\n")}\n`);
 }
 
 async function pinEntry(

@@ -304,7 +304,7 @@ describe("distill end-to-end", () => {
                 content:
                   index < 2
                     ? "Out: done\nDict+: AUTH=authentication fix"
-                    : "Out: used A1"
+                    : "Out: used A"
               }
             }
           ]
@@ -333,39 +333,36 @@ describe("distill end-to-end", () => {
 
       expect(first.stdout).toContain("Dict+: AUTH=authentication fix");
       expect(second.stdout).toContain("Dict+: AUTH=authentication fix");
-      expect(shown.stdout).toContain("A1\tmacro\tactive\tauthentication fix");
+      expect(shown.stdout).toContain("A\tmacro\tactive\tauthentication fix");
       expect(third.code).toBe(0);
       expect(thirdPrompt).toContain("Known /distill DSL memory");
-      expect(thirdPrompt).toContain("A1 = authentication fix");
+      expect(thirdPrompt).toContain("A = authentication fix");
     } finally {
       fake.stop();
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("auto-learns inline variable dict and injects it into later prompts", async () => {
+  it("learns inline variable dict from thread transcript and injects it into later prompts", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "distill-e2e-var-dsl-"));
     const env = {
       DISTILL_CONFIG_PATH: path.join(dir, "config.json")
     };
     const fake = await createFakeChatProvider((body, index) => {
-      if (index === 1) {
-        const prompt = JSON.stringify(body);
+      expect(index).toBe(0);
+      const prompt = JSON.stringify(body);
 
-        expect(prompt).toContain("#w3 = workspace");
-        expect(prompt).toContain("#v1 = version");
-        expect(prompt).toContain("term=#x1");
-      }
+      expect(prompt).toContain("#c1 = cache");
+      expect(prompt).toContain("#m1 = model");
+      expect(prompt).toContain("<term>=#<letter><digit>");
+      expect(prompt).not.toContain("workspace=#w3");
 
       return new Response(
         JSON.stringify({
           choices: [
             {
               message: {
-                content:
-                  index === 0
-                    ? "S npm workspace=#w3 version=#v1 sync no-op"
-                    : "O used #w3 + #v1"
+                content: "O used #c1 + #m1"
               }
             }
           ]
@@ -375,80 +372,59 @@ describe("distill end-to-end", () => {
     });
 
     try {
-      const first = await runLauncher(["summarize"], {
-        env: createProviderEnv(fake.host, env),
-        inputSteps: [{ data: "workspace version check\n" }]
+      const learned = await runLauncher(["dsl", "learn-thread", "--stdin"], {
+        env,
+        inputSteps: [
+          {
+            data: [
+              "S cache=#c1 warmed model=#m1",
+              "D inspect #c1 + #m1",
+              "D warm #c1 + #m1",
+              "D compare #c1 + #m1",
+              "D reuse #c1 + #m1",
+              "D keep #c1 + #m1"
+            ].join("\n")
+          }
+        ]
       });
       const shown = await runLauncher(["dsl", "show", "--scope", "project"], {
         env
       });
-      const second = await runLauncher(["summarize"], {
+      const summary = await runLauncher(["summarize"], {
         env: createProviderEnv(fake.host, env),
-        inputSteps: [{ data: "workspace version later\n" }]
+        inputSteps: [{ data: "cache model later\n" }]
       });
 
-      expect(first.stdout).toContain("workspace=#w3");
-      expect(shown.stdout).toContain("#w3\talias\tactive\tworkspace");
-      expect(shown.stdout).toContain("#v1\talias\tactive\tversion");
-      expect(second.stdout).toContain("O used #w3 + #v1");
-      expect(fake.requests).toHaveLength(2);
+      expect(learned.stdout).toContain("active #c1 added to project");
+      expect(learned.stdout).toContain("active #m1 added to project");
+      expect(shown.stdout).toContain("#c1\talias\tactive\tcache");
+      expect(shown.stdout).toContain("#m1\talias\tactive\tmodel");
+      expect(summary.stdout).toContain("O used #c1 + #m1");
+      expect(fake.requests).toHaveLength(1);
     } finally {
       fake.stop();
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("learns DSL candidates from a thread transcript through the reviewer", async () => {
+  it("promotes explicit inline variables from a thread transcript without reviewer calls", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "distill-e2e-thread-dsl-"));
     const env = {
       DISTILL_CONFIG_PATH: path.join(dir, "config.json")
     };
-    const fake = await createFakeChatProvider((body) => {
-      const prompt = JSON.stringify(body);
-
-      expect(prompt).toContain("Deterministic candidates");
-      expect(prompt).toContain("Thread transcript");
-      expect(prompt).toContain("release flow");
-
-      return new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify([
-                  {
-                    key: "RF",
-                    meaning: "release flow",
-                    kind: "macro",
-                    scope: "project",
-                    reason: "repeated workflow",
-                    confidence: 0.9
-                  },
-                  {
-                    key: "S",
-                    meaning: "secret token value",
-                    kind: "alias",
-                    scope: "project",
-                    reason: "sensitive",
-                    confidence: 0.99
-                  }
-                ])
-              }
-            }
-          ]
-        }),
-        { status: 200 }
-      );
-    });
 
     try {
       const transcript = [
-        "release flow needs npm publish",
-        "release flow needs github release",
+        "S release-flow=#r1 started",
+        "D inspect #r1",
+        "D verify #r1",
+        "D publish #r1",
+        "D announce #r1",
+        "D close #r1",
         "secret token value secret token value"
       ].join("\n");
       const result = await runLauncher(["dsl", "learn-thread", "--stdin"], {
-        env: createProviderEnv(fake.host, env),
+        env,
         inputSteps: [{ data: transcript }]
       });
       const shown = await runLauncher(["dsl", "show", "--scope", "project"], {
@@ -456,12 +432,10 @@ describe("distill end-to-end", () => {
       });
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("candidate R1 added to project");
-      expect(shown.stdout).toContain("R1\tmacro\tcandidate\trelease flow");
+      expect(result.stdout).toContain("active #r1 added to project");
+      expect(shown.stdout).toContain("#r1\talias\tactive\trelease flow");
       expect(shown.stdout).not.toContain("secret token value");
-      expect(fake.requests).toHaveLength(1);
     } finally {
-      fake.stop();
       await rm(dir, { recursive: true, force: true });
     }
   });

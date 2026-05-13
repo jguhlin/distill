@@ -202,8 +202,9 @@ describe("summarizeBatch", () => {
     expect(body.messages[0].content).toContain(
       "AUTH = authentication fix (alias, project)"
     );
-    expect(body.messages[0].content).toContain("term=#x1");
-    expect(body.messages[0].content).toContain("workspace=#w3");
+    expect(body.messages[0].content).toContain("<term>=#<letter><digit>");
+    expect(body.messages[0].content).toContain("there is no fixed variable list");
+    expect(body.messages[0].content).not.toContain("workspace=#w3");
     expect(body.messages[0].content).toContain("Emit Dict+ only");
   });
 });

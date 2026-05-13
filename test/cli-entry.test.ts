@@ -199,12 +199,7 @@ describe("cli entrypoint", () => {
         await readFile(path.join(dir, "dsl", "global.json"), "utf8")
       ) as { entries: Array<{ key: string; status: string; builtin?: boolean }> };
 
-      expect(dslMemory.entries).toContainEqual(
-        expect.objectContaining({ key: "B", status: "pinned", builtin: true })
-      );
-      expect(dslMemory.entries).toContainEqual(
-        expect.objectContaining({ key: "1", status: "pinned", builtin: true })
-      );
+      expect(dslMemory.entries).toEqual([]);
       expect(
         await readFile(
           path.join(home, ".codex", "skills", "distill", "SKILL.md"),

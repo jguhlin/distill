@@ -23,7 +23,7 @@ D inspect remotes + MR meta
 R merge/update may block w/o token
 ```
 
-Inline variables such as `workspace=#w3` and `version=#v1` are learned into DSL memory and reused in later prompts.
+Inline variables use dynamic `<term>=#<letter><digit>` assignments chosen by the model from repeated terms. They stay thread-local unless `distill dsl learn-thread --stdin` sees the explicit variable more than 5 times; learned entries are removed when absent from the next learned thread.
 
 `/distill` also has DSL memory:
 

@@ -169,30 +169,32 @@ R missing token => merge blocked
 
 Every thread must use DSL/Dict when it helps compression.
 Start with `Dict:` when meanings are not already shared.
-Define short thread variables inline when a noun will repeat:
+Define short thread variables inline when a noun repeats or is likely to repeat.
+The model chooses the variables dynamically from the current task; there is no fixed variable list.
 
 ```text
-S npm workspace=#w3 version=#v1 sync no-op
-D patch=#p1 package=#p2 manifests mechanically
-D regen lock after #p2 manifest sync
-N no release tag before clean verify
+S cache=#c1 warmed model=#m1
+D inspect #c1 hit rate
+D compare #m1 latency
+N no extra vars for one-off nouns
 ```
 
 After definition, use the variable:
 
 ```text
-D inspect #w3 config
-D bump #v1 in #p2 manifests
+D tune #c1 ttl
+D benchmark #m1 output
 ```
 
 Rules:
 
-- variable key format: `#` + letter + digit, for example `#w3`
+- variable key format: `#` + letter + digit
 - one stable meaning per variable inside the thread
 - do not define variables for secrets, people, IDs, paths, URLs, or one-off terms
 - do not redefine an active variable; add a new key if meaning changed
-- inline `#` variables are active immediately after explicit assignment
-- learn reusable variables with `Dict+` or transcript learning when available
+- inline `#` variables are thread-local immediately after explicit assignment
+- persist only variables used more than 5 times in a `distill dsl learn-thread --stdin` transcript
+- remove a learned variable when it is absent from the next learned thread
 
 ## Good Response Forms
 
