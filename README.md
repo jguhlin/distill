@@ -48,4 +48,4 @@ rg -n "terminal|PERMISSION|permission|Permissions|Plan|full access|default" desk
 
 We also teach your LLM to talk and thing a more efficient way.
 
-![Distill Language](https://github.com/samuelfaj/distill/blob/main/examples/language.png?raw=true)
+![Distill Language](https://github.com/samuelfaj/distill/blob/main/examples/distill-language.png?raw=true)
