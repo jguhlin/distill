@@ -46,6 +46,6 @@ rg -n "terminal|PERMISSION|permission|Permissions|Plan|full access|default" desk
 
 ## Distill Language
 
-We also teach your LLM to talk and thing a more efficient way.
+We also teach your LLM to talk and think a more efficient way.
 
 ![Distill Language](https://github.com/samuelfaj/distill/blob/main/examples/distill-language.png?raw=true)
